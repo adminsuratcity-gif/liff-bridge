@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>กำลังเชื่อมต่อ LINE...</title>
+<style>
+  body {
+    font-family: 'Noto Sans Thai', -apple-system, sans-serif;
+    background: #fbfaff;
+    color: #2a2438;
+    text-align: center;
+    padding-top: 70px;
+    margin: 0;
+  }
+  .spinner {
+    width: 34px; height: 34px; border: 4px solid #e6e0f5; border-top-color: #8b7cc8;
+    border-radius: 50%; animation: spin .8s linear infinite; margin: 20px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn {
+    display: inline-block; margin-top: 20px; padding: 14px 24px;
+    background: linear-gradient(135deg, #a595d9, #8b7cc8); color: #fff;
+    text-decoration: none; border-radius: 12px; font-size: 16px; font-weight: 700; border: none; cursor: pointer;
+  }
+  .error { color: #b71c1c; background: #fdecea; border-radius: 10px; padding: 12px; margin: 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div style="font-size:36px;">📋</div>
+  <div id="statusText">กำลังเชื่อมต่อ LINE...</div>
+  <div class="spinner" id="spinner"></div>
+  <div id="errorBox"></div>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    // ============================================================
+    // ต้องแก้ 2 ค่านี้ให้เป็นค่าจริงของหน่วยงานก่อนใช้งาน (ดู LIFF_BRIDGE_SETUP.md)
+    // ============================================================
+    var LIFF_ID = "ใส่ LIFF_ID ของท่านตรงนี้";               // เช่น "2000000000-AbCdEfGh"
+    var BACKEND_EXEC_URL = "ใส่ URL เว็บแอป Apps Script ตรงนี้"; // เช่น "https://script.google.com/macros/s/AKfycb.../exec"
+    // ============================================================
+
+    function showError(msg) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('statusText').textContent = 'เกิดข้อผิดพลาด';
+      document.getElementById('errorBox').innerHTML =
+        '<div class="error">' + msg + '</div>' +
+        '<button class="btn" onclick="location.reload()">🔄 ลองใหม่อีกครั้ง</button>';
+    }
+
+    if (LIFF_ID.indexOf('ใส่') === 0 || BACKEND_EXEC_URL.indexOf('ใส่') === 0) {
+      showError('ยังไม่ได้ตั้งค่า LIFF_ID หรือ BACKEND_EXEC_URL ในไฟล์นี้ กรุณาแก้ไขตาม LIFF_BRIDGE_SETUP.md ก่อนใช้งาน');
+    } else if (typeof liff === 'undefined') {
+      showError('โหลด LIFF SDK ไม่สำเร็จ กรุณาตรวจสอบสัญญาณอินเทอร์เน็ตแล้วลองใหม่');
+    } else {
+      var timeoutHandle = setTimeout(function () {
+        showError('เชื่อมต่อ LINE นานเกินไป (เกิน 15 วินาที) เครือข่ายอาจช้าหรือไม่เสถียร');
+      }, 15000);
+
+      liff.init({ liffId: LIFF_ID }).then(function () {
+        if (!liff.isLoggedIn()) {
+          liff.login(); // หน้านี้เป็น top-level จริง ไม่ถูก sandbox ครอบ — liff.login() ทำงานได้ปกติ
+          return;
+        }
+        clearTimeout(timeoutHandle);
+        var idToken = liff.getIDToken();
+        if (!idToken) {
+          showError('ไม่สามารถดึง LINE ID Token ได้ กรุณาลองใหม่');
+          return;
+        }
+        // ส่ง idToken กลับไปที่ระบบหลัก (Apps Script) ผ่าน URL — ฝั่ง server จะตรวจสอบความถูกต้องของ
+        // token นี้อีกครั้งกับ LINE โดยตรงเสมอ (ดู AuthService.gs -> verifyLineIdToken_) จึงปลอดภัย
+        // แม้จะส่งผ่าน URL ก็ตาม เพราะ token ปลอมหรือหมดอายุจะถูกปฏิเสธที่ฝั่ง server
+        document.getElementById('statusText').textContent = 'เชื่อมต่อสำเร็จ กำลังพากลับ...';
+        window.location.href = BACKEND_EXEC_URL + '?idToken=' + encodeURIComponent(idToken);
+      }).catch(function (err) {
+        clearTimeout(timeoutHandle);
+        showError('เชื่อมต่อ LINE ไม่สำเร็จ: ' + (err && err.message ? err.message : String(err)));
+      });
+    }
+  </script>
+</body>
+</html>
